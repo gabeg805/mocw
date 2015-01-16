@@ -110,10 +110,13 @@
 ##                          that the "find playlist directory" function is more 
 ##                          general.
 ## 
-##     gabeg Jan 15 2015 <> Removed the functions "is_opt_order", "order_check", 
+##     gabeg Jan 15 2015 <> Removed the functions "is_opt_order", "order_check",
 ##                          "option_count", "remove_pid_lock", and "run_option".
-##                          Removed the "seek" and "volume" options. Added global 
-##                          variables. Updated documentation.
+##                          Removed the "seek" and "volume" options. Combined the
+##                          "play-add", "play-look", and "play-search" added them to
+##                          this program. Renamed all the functions to be clearer as
+##                          to what they do. Added global variables. Updated
+##                          documentation.
 ## 
 ## 
 ## NOTICE: 
@@ -165,9 +168,9 @@ PLAYLIST_PATH=""
 
 ## Displays the help screen
 function print_usage {
-    echo "Usage: ${PROG_NAME} [-h] [-p] [-f] [-b] [-i] [-x] [<playlist>]"
-    echo "          [-a <songs> <playlist>] [-r <songs> <playlist>]"
-    echo "          [-l <playlist>] [-s <song>]"
+    echo "Usage: ${PROG_NAME} [-h] [--setup] [-p] [-f] [-b] [-i] [-x] [<playlist>]"
+    echo "            [-a <songs> <playlist>] [-r <songs> <playlist>]"
+    echo "            [-l <playlist>] [-s <song>]"
     
     exit 1
 }
@@ -193,8 +196,14 @@ function is_player_running {
 
 ## Check if specified playlist key is correct
 function is_playlist {
-    local key=`cat "${PLAYLIST_LOG}" | cut -s -f1 -d'-' | sed 's/[ \t]*$//' | grep -x -c "$1"`
-    local name=`cat "${PLAYLIST_LOG}" | cut -s -f2 -d'-' | sed 's/^[ \t]*//' | grep -x -c "$1"`
+    local key=`cat "${PLAYLIST_LOG}" \
+                   | cut -s -f1 -d'-' \
+                   | sed 's/[ \t]*$//' \
+                   | grep -x -c "${PLAYLIST_NAME}"`
+    local name=`cat "${PLAYLIST_LOG}" \
+                    | cut -s -f2 -d'-' \
+                    | sed 's/^[ \t]*//' \
+                    | grep -x -c "${PLAYLIST_NAME}"`
     
     if [ "${key}" -eq 1 -o "${name}" -eq 1 ]; then
         echo true
@@ -207,7 +216,7 @@ function is_playlist {
 
 ## Verify input playlist
 function playlist_verify {
-    local play_check=`is_playlist "${PLAYLIST_NAME}"`
+    local play_check=`is_playlist`
     
     if [ "${play_check}" == false ]; then
         echo "${PROG_NAME}: No playlist found for '${PLAYLIST_NAME}'."
@@ -245,11 +254,16 @@ function playlist_song_list {
     ## Look up songs in playlist    
     local song_list=(`find "${PLAYLIST_PATH}/"`) 
     local n=$[ ${#song_list} - 1 ]
+
+    local play_actual_name=`cat "${PLAYLIST_LOG}" \
+                                | grep "${PLAYLIST_NAME}" \
+                                | cut -s -f2 -d'-' \
+                                | sed 's/^[ \t]*//'`
     
-    echo ":: Listing songs in '${PLAYLIST_NAME}'..." 
+    echo ":: Listing songs in '${play_actual_name}'..." 
     
     for song in "${song_list[@]:1:$n}"; do
-        echo "${song}" | grep --color=always '/'
+        echo "$(basename ${song})"
     done
 }
 
@@ -409,9 +423,6 @@ function player_start {
 ## Music player options
 function main {
     
-    ## Start music player
-    player_start 
-    
     ## Parameter option check
     case "${ARGV[0]}" in
         
@@ -482,6 +493,7 @@ function main {
         
         ## Searches For A Song (specified by user)
 	    "-s"|"--search") 
+            player_start 
             library_song_search
 	        ;;
         
@@ -498,6 +510,7 @@ function main {
             
             ## Play the input playlist
             playlist_verify
+            player_start 
             playlist_play 
     		;;
     esac
