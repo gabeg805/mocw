@@ -51,7 +51,8 @@
 ##         Quit the music player.
 ## 
 ##     <playlist>,
-##         Playlist abbreviation, or full name, that is found in the playlist preferences file.
+##         Playlist abbreviation, or full name, that is found in the playlist 
+##         preferences file.
 ## 
 ##     -a <songs> <playlist>
 ##         Add the specified songs to the playlist.
@@ -169,10 +170,21 @@ PLAYLIST_PATH=""
 ## Displays the help screen
 function print_usage {
     echo "Usage: ${PROG_NAME} [-h] [--setup] [-p] [-f] [-b] [-i] [-x] [<playlist>]"
-    echo "            [-a <songs> <playlist>] [-r <songs> <playlist>]"
-    echo "            [-l <playlist>] [-s <song>]"
+    echo -e "\t[-a <songs> <playlist>] [-r <songs> <playlist>]"
+    echo -e "\t[-l <playlist>] [-s <song>]"
     
     exit 1
+}
+
+
+
+## ###########################
+## ##### PRINT PLAYLISTS #####
+## ###########################
+
+## Print available playlists
+function print_playlists {
+    sed "1,1d" "${PLAYLIST_LOG}"
 }
 
 
@@ -239,7 +251,7 @@ function playlist_verify {
 function playlist_path {
     local name=`grep "${PLAYLIST_NAME}" "${PLAYLIST_LOG}" | cut -f2 -d'-' | sed 's/^[ \t]*//'`
     
-    if [ ! -z "${name}" ]; then
+    if [ ! -z "${name}" ] && [ ! -z "${PLAYLIST_NAME}" ]; then
 	    echo "${MUSIC_DIR}/${name}"
     else
         echo "Empty"
@@ -291,8 +303,8 @@ function playlist_remove_song {
     local n=$[ $1 - 1 ]
     
     for song in "${ARGV[@]:1:${n}}"; do
-        if [ -f "${song}" ]; then
-            local song_path="${PLAYLIST_PATH}/$(basename ${song})"
+        local song_path="${PLAYLIST_PATH}/$(basename ${song})"
+        if [ -f "${song_path}" ]; then
             rm -i "${song_path}"
         fi
     done
@@ -487,8 +499,12 @@ function main {
             PLAYLIST_PATH=`playlist_path`
             
             ## Print playlist songs
-            playlist_verify
-            playlist_song_list
+            if [ ! -z "${PLAYLIST_NAME}" ]; then
+                playlist_verify
+                playlist_song_list
+            else
+                print_playlists
+            fi
 	        ;;
         
         ## Searches For A Song (specified by user)
@@ -498,6 +514,10 @@ function main {
 	        ;;
         
         ## Play a playlist
+        "-"*)
+            mocp "${ARGV[@]}"
+            ;;
+        
 	    *)
             ## Check input
             if [ -z "${ARGV[0]}" ]; then
