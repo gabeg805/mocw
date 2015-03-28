@@ -18,9 +18,10 @@
 ## 
 ## SYNTAX: 
 ## 
-##     play [-h] [--setup] [-p] [-f] [-b] [-i] [-x] [<playlist>]
-##          [-a <songs> <playlist>] [-r <songs> <playlist>] 
-##          [-l <playlist>] [-s <song>]
+##     play [-h|--help] [--setup] [-P|--play|--pause] [-f|--forward] [-p|--previous] 
+##         [-i|--info] [-x|--exit] [[-a|--add] [-r|--remove] <songs> <playlist>]
+##         [[-l|--list] <playlist>] [[-s|--search] <song>] [[-q|--queue] <songs>] 
+##         [[-mp|--music-player] <command>] [<playlist>]
 ## 
 ## 
 ## PURPOSE:
@@ -35,29 +36,25 @@
 ##     -h, --help
 ##         Print program usage.
 ## 
-##     -p
+##     -P, --play, --pause
 ##         Toggle play/pause.
 ## 
-##     -f
+##     -f, --forward
 ##         Play next song.
 ## 
-##     -b
+##     -p, --previous
 ##         Play previous song.
 ## 
-##     -i
+##     -i, --info
 ##         Print current song information.
 ## 
-##     -x
+##     -x, --exit
 ##         Quit the music player.
 ## 
-##     <playlist>,
-##         Playlist abbreviation, or full name, that is found in the playlist 
-##         preferences file.
-## 
-##     -a <songs> <playlist>
+##     -a, --add <songs> <playlist>
 ##         Add the specified songs to the playlist.
 ## 
-##     -r <songs> <playlist>
+##     -r, --remove <songs> <playlist>
 ##         Remove the specified songs from the playlist.
 ## 
 ##     -l, --list <playlist>
@@ -66,23 +63,47 @@
 ##     -s, --search <song>
 ##         Search for and play the specified song.
 ## 
+##     -q, --queue <songs>
+##         Queue songs onto the current playlist.
+## 
+##     -mp, --music-player <command>
+##         Execute commands using the actual music player.
+## 
+##     <playlist>,
+##         Playlist abbreviation, or full name, that is found in the playlist 
+##         preferences file.
+## 
 ## 
 ## FUNCTIONS:
 ## 
-##     print_usage          - Print program usage.
+##     print_usage                  - Print program usage.
 ## 
-##     is_player_running    - Check if music player is running.
-##     is_playlist          - Check if specified playlist is correct.
-##     playlist_verify      - Verify playlist abbreviation.
+##     is_player_running            - Check if music player is running.
+##     is_playlist                  - Check if specified playlist is correct.
+##     check_playlist               - Verify playlist abbreviation.
 ## 
-##     playlist_path        - Return the playlist path.
-##     playlist_song_list   - Print songs in the specified playlist.
-##     playlist_add_song    - Add songs to the specified playlist.
-##     playlist_remove_song - Remove songs from the specified playlist.
-##     library_song_search  - Search entire library for the given song.
-##     playlist_play        - Play songs in the playlist.
+##     get_playlist_path            - Return the playlist path.
 ## 
-##     player_start         - Start the music player.
+##     playlist_add_song            - Add songs to the specified playlist.
+##     playlist_remove_song         - Remove songs from the specified playlist.
+## 
+##     library_song_search          - Search entire library for the given song.
+## 
+##     music_player_setup           - Setup the music player preferences files.
+##     music_player_start           - Start the music player.
+##     music_player_play            - Toggle play/pause.
+##     music_player_forward         - Play next song.
+##     music_player_previous        - Play previous song.
+##     music_player_info            - Display info on current song.
+##     music_player_exit            - Quit the music player.
+##     music_player_playlist_modify - Add/remove songs to the specified playlist.
+##     music_player_list_music      - Display all playlists or all songs in the 
+##                                    specified playlist.  
+##     music_player_search          - Search for a song in the library.
+##     music_player_queue           - Queue the specified songs onto the current 
+##                                    playlist.
+##     music_player_commands        - Execute commands using the actual music player.
+##     music_player_playlist_play   - Play the specified playlist.
 ## 
 ## 
 ## FILE STRUCTURE:
@@ -90,7 +111,9 @@
 ##     * Print Program Usage
 ##     * Check Music Parameters
 ##     * Playlist Information 
-##     * Music Player Setup
+##     * Modify Playlists
+##     * Search For Song In Library
+##     * Music Player Commands
 ##     * Music Player Interface
 ## 
 ## 
@@ -119,6 +142,17 @@
 ##                          to what they do. Added global variables. Updated
 ##                          documentation.
 ## 
+##     gabeg Mar 28 2015 <> Made the main function look cleaner by adding everything 
+##                          into its own function. Removed functions that were no 
+##                          longer needed and made "library_song_search" more usable
+##                          by just having it set a variable to the song that is 
+##                          found. Made it so that this program can queue songs into
+##                          the current playlist. Also made it so that it can execute 
+##                          commands using the actual music player. The functions 
+##                          read in songs (add, remove, search, and queue) now use 
+##                          the "library_song_search" function so that the user does
+##                          not always have to know the full path of the song.
+## 
 ## 
 ## NOTICE: 
 ## 
@@ -140,26 +174,22 @@ IFS=$'\n'
 ## Program information
 ARGV=("$@")
 PROG_NAME=`basename $0`
+PROG_DIR=`echo "$0" | sed "s/\/${PROG_NAME}$//"`
 
-PROG_NAME_LEN=${#PROG_NAME}
-PROG_PATH_LEN=${#0}
-PROG_DIR_LEN=$[ ${PROG_PATH_LEN} - ${PROG_NAME_LEN} - 1 ]
-
-PROG_DIR=${0:0:${PROG_DIR_LEN}}
-
-## Playlist file
-MUSIC_LOG="${PROG_DIR}/log/music.pref"
-LIBRARY_LOG="${PROG_DIR}/log/lib.pref"
-PLAYLIST_LOG="${PROG_DIR}/log/playlists.pref"
+## Preference files
+MUSIC_PREF_FILE="${PROG_DIR}/pref/music.pref"
+LIBRARY_PREF_FILE="${PROG_DIR}/pref/lib.pref"
+PLAYLIST_PREF_FILE="${PROG_DIR}/pref/playlists.pref"
 
 ## Directories
-MUSIC_DIR=`head -1 "${MUSIC_LOG}"`
-LIBRARY_DIR=`head -1 "${LIBRARY_LOG}"`
+MUSIC_DIR=`head -1 "${MUSIC_PREF_FILE}"`
+LIBRARY_DIR=`head -1 "${LIBRARY_PREF_FILE}"`
 
 ## Music player variables
 MUSIC_PLAYER="mocp"
 PLAYLIST_NAME=""
 PLAYLIST_PATH=""
+SEARCH_SONG=""
 
 
 
@@ -169,22 +199,12 @@ PLAYLIST_PATH=""
 
 ## Displays the help screen
 function print_usage {
-    echo "Usage: ${PROG_NAME} [-h] [--setup] [-p] [-f] [-b] [-i] [-x] [<playlist>]"
-    echo -e "\t[-a <songs> <playlist>] [-r <songs> <playlist>]"
-    echo -e "\t[-l <playlist>] [-s <song>]"
-    
+    echo "Usage: ${PROG_NAME} [-h|--help] [--setup] [-P|--play|--pause]"
+    echo -e "\t[-f|--forward] [-p|--previous] [-i|--info] [-x|--exit]"
+    echo -e "\t[[-a|--add] [-r|--remove] <songs> <playlist>]"
+    echo -e "\t[[-l|--list] <playlist>] [[-s|--search] <song>]"
+    echo -e "\t[[-q|--queue] <songs>] [[-mp|--music-player] <command>] [<playlist>]"
     exit 1
-}
-
-
-
-## ###########################
-## ##### PRINT PLAYLISTS #####
-## ###########################
-
-## Print available playlists
-function print_playlists {
-    sed "1,1d" "${PLAYLIST_LOG}"
 }
 
 
@@ -195,7 +215,7 @@ function print_playlists {
 
 ## Check if music player is running
 function is_player_running {
-    local running=`pgrep -c "${MUSIC_PLAYER}"`
+    running=`pgrep -c "${MUSIC_PLAYER}"`
     
     if [ "${running}" -eq 0 ]; then
         echo false
@@ -208,14 +228,13 @@ function is_player_running {
 
 ## Check if specified playlist key is correct
 function is_playlist {
-    local key=`cat "${PLAYLIST_LOG}" \
-                   | cut -s -f1 -d'-' \
-                   | sed 's/[ \t]*$//' \
-                   | grep -x -c "${PLAYLIST_NAME}"`
-    local name=`cat "${PLAYLIST_LOG}" \
-                    | cut -s -f2 -d'-' \
-                    | sed 's/^[ \t]*//' \
-                    | grep -x -c "${PLAYLIST_NAME}"`
+    key=`cut -s -f1 -d'-' "${PLAYLIST_PREF_FILE}" \
+             | sed 's/[ \t]*$//' \
+             | grep -x -c "${PLAYLIST_NAME}"`
+    
+    name=`cut -s -f2 -d'-' "${PLAYLIST_PREF_FILE}" \
+              | sed 's/^[ \t]*//' \
+              | grep -x -c "${PLAYLIST_NAME}"`
     
     if [ "${key}" -eq 1 -o "${name}" -eq 1 ]; then
         echo true
@@ -226,11 +245,9 @@ function is_playlist {
 
 
 
-## Verify input playlist
-function playlist_verify {
-    local play_check=`is_playlist`
-    
-    if [ "${play_check}" == false ]; then
+## Check input playlist abbreviation
+function check_playlist {
+    if [ `is_playlist` == false ]; then
         echo "${PROG_NAME}: No playlist found for '${PLAYLIST_NAME}'."
         exit 1
     fi
@@ -248,8 +265,10 @@ function playlist_verify {
 ## ################################
 
 ## Get path to playlist directory
-function playlist_path {
-    local name=`grep "${PLAYLIST_NAME}" "${PLAYLIST_LOG}" | cut -f2 -d'-' | sed 's/^[ \t]*//'`
+function get_playlist_path {
+    name=`grep "${PLAYLIST_NAME}" "${PLAYLIST_PREF_FILE}" \
+                    | cut -f2 -d'-' \
+                    | sed 's/^[ \t]*//'`
     
     if [ ! -z "${name}" ] && [ ! -z "${PLAYLIST_NAME}" ]; then
 	    echo "${MUSIC_DIR}/${name}"
@@ -260,36 +279,38 @@ function playlist_path {
 
 
 
-## Print songs in playlist
-function playlist_song_list {
-    
-    ## Look up songs in playlist    
-    local song_list=(`find "${PLAYLIST_PATH}/"`) 
-    local n=$[ ${#song_list} - 1 ]
-
-    local play_actual_name=`cat "${PLAYLIST_LOG}" \
-                                | grep "${PLAYLIST_NAME}" \
-                                | cut -s -f2 -d'-' \
-                                | sed 's/^[ \t]*//'`
-    
-    echo ":: Listing songs in '${play_actual_name}'..." 
-    
-    for song in "${song_list[@]:1:$n}"; do
-        echo "$(basename ${song})"
-    done
-}
-
-
+## ############################
+## ##### MODIFY PLAYLISTS #####
+## ############################
 
 ## Add songs to the specified playlist
 function playlist_add_song {
     
     ## Add songs to the playlist
-    local n=$[ $1 - 1 ]
+    n=$[ $1 - 1 ]
     
     for song in "${ARGV[@]:1:${n}}"; do
+        song_path="$(pwd)/${song}"
+        
+        ## Song directory specified
         if [ -f "${song}" ]; then
-            ln -v -s "$(pwd)/${song}" "${PLAYLIST_PATH}/$(basename ${song})"
+            if [ -f "${song_path}" ]; then
+                loc="${song_path}"
+            else
+                loc="${song}"
+            fi
+            
+            ## Create the symbolic link
+            ln -v -s "${loc}" "${PLAYLIST_PATH}/$(basename ${song})"
+        else
+            
+            ## Find song directory in library
+            library_song_search "${song}"
+            
+            ## Create the symbolic link
+            if [ $? -eq 0 ]; then
+                ln -v -s "${SEARCH_SONG}" "${PLAYLIST_PATH}/$(basename ${SEARCH_SONG})"
+            fi
         fi
     done
 }
@@ -300,10 +321,11 @@ function playlist_add_song {
 function playlist_remove_song {
     
     ## Remove songs from the playlist
-    local n=$[ $1 - 1 ]
+    n=$[ $1 - 1 ]
     
     for song in "${ARGV[@]:1:${n}}"; do
-        local song_path="${PLAYLIST_PATH}/$(basename ${song})"
+        song_path="${PLAYLIST_PATH}/$(basename ${song})"
+        
         if [ -f "${song_path}" ]; then
             rm -i "${song_path}"
         fi
@@ -312,11 +334,15 @@ function playlist_remove_song {
 
 
 
+## ######################################
+## ##### SEARCH FOR SONG IN LIBRARY #####
+## ######################################
+
 ## Search for a song in the library
 function library_song_search {
     
     ## Song to search for
-    local search="${ARGV[1]}"
+    search="${ARGV[1]}"
     
     if [ -z "${ARGV[1]}" ]; then
         echo "What song do you want to search for?"
@@ -325,7 +351,7 @@ function library_song_search {
     fi
     
     ## Songs in library that match search
-    local matches=(`find "${LIBRARY_DIR}" | grep -i "${search}"`)
+    matches=(`find "${LIBRARY_DIR}" | grep -i "${search}"`)
     
     ## Choose what to do depending on number of matches found
     case ${#matches[@]} in
@@ -333,7 +359,7 @@ function library_song_search {
         ## No matches found
         0)
             echo -e "${PROG_NAME}: No songs found matching '${search}'."
-            exit 1
+            return 1
             ;;
         
         ## One match found
@@ -343,26 +369,24 @@ function library_song_search {
         [2-9]|1[0-9]) 
             
             ## Print matches
-            echo -e "Results Found:"
+            echo -e "Results for '${search}' found:"
             
             for song in "${matches[@]}"; do 
                 echo "$(basename ${song})"
             done | grep -n --color=always ""
             
-            echo -e "\n""Enter a number, or hit [ENTER] to skip."                      
+            echo -e "\nEnter a number, or hit [ENTER] to skip."                      
             ;;
         
         ## Too many results found
         *)
             echo -e "${PROG_NAME}: Too many results found matching '${search}'." 
-            exit 1
+            return 1
             ;;
     esac    
     
     
     ## Determine song number
-    local num
-    
     if [ ${#matches[@]} -gt 1 ]; then
         read -p "> " num
         echo
@@ -373,48 +397,63 @@ function library_song_search {
     ## Make sure input is a valid number
     if [ -z "${num}" ]; then 
         echo ":: Exiting...Done"
-        exit 0
+        return 1
     elif [ ${num} -gt ${#matches[@]} -o ${num} -lt 1 ] 2> /dev/null; then
         echo "${PROG_NAME}: Invalid number '${num}' entered."
-        exit 1
+        return 1
     fi
     
     ## Determine song path
-    local index=$[ ${num} - 1 ]
-    local song="${matches[${index}]}"
+    index=$[ ${num} - 1 ]
+    song_path="${matches[${index}]}"
     
-    ## Play the matched song 
-    echo -e "Match located here: ${song}"
-
-    ${MUSIC_PLAYER} -a "${song}"    
-    ${MUSIC_PLAYER} -p
+    ## Update the search song variable
+    echo -e "Match located here: ${song_path}"
+    
+    SEARCH_SONG="${song_path}"
+    return 0
 }
 
 
 
-## Play songs in playlist
-function playlist_play {
+## #################################
+## ##### MUSIC PLAYER COMMANDS #####
+## #################################
+
+## Program setup
+function music_player_setup {
     
-    ## Add playlist songs to queue
-    echo "Playing '${PLAYLIST_NAME}'..."
-    ${MUSIC_PLAYER} -a "${PLAYLIST_PATH}"
+    ## Modify pref file containing playlist names and keys
+    echo "Where are your music playlists located?"
+    read -p "> " mp
     
-    ## Play songs
-    if ${MUSIC_PLAYER} -p; then 
-        :
-    else 
-        ${MUSIC_PLAYER} -p
+    if [ ! -z "${mp}" ]; then 
+        echo -n ":: Modifying playlist preference file..."
+        echo "${mp}" > "${MUSIC_PREF_FILE}"
+        echo "Done."
+    else
+        echo "${PROG_NAME}: Music playlist preference file unchanged."
     fi
+    
+    ## Modify pref file containing music library location
+    echo "Where is your music library located?"
+    read -p "> " ml
+    
+    if [ ! -z "${ml}" ]; then 
+        echo "${ml}" > "${LIBRARY_PREF_FILE}"
+    else
+        echo -n ":: Modifying music library preference file..."
+        echo "${PROG_NAME}: Music library preference file unchanged."
+        echo "Done."
+    fi
+    
+    exit 0
 }
 
 
-
-## ##############################
-## ##### MUSIC PLAYER SETUP #####
-## ##############################
 
 ## Start the music player
-function player_start {
+function music_player_start {
     
     ## Startup music player
     if `is_player_running`; then
@@ -424,6 +463,161 @@ function player_start {
         ${MUSIC_PLAYER} -c
         ${MUSIC_PLAYER} -t shuffle 
     fi 
+}
+
+
+
+## Toggle play/pause
+function music_player_play {
+    ${MUSIC_PLAYER} -G
+}
+
+
+
+## Play next song
+function music_player_forward {
+    ${MUSIC_PLAYER} -f
+}
+
+
+
+## Play previous song
+function music_player_previous {
+    ${MUSIC_PLAYER} -r
+}
+
+
+
+## Display current song info
+function music_player_info {
+    ${MUSIC_PLAYER} -i
+}
+
+
+
+## Exit the music player
+function music_player_exit {
+    if [ `is_player_running` == false ]; then
+        echo "${PROG_NAME}: '${MUSIC_PLAYER}' is not running."
+        exit 1
+    fi
+    
+    ${MUSIC_PLAYER} -x
+}
+
+
+
+## Modify a playlist by adding/removing songs
+function music_player_playlist_modify {
+    
+    ## Playlist attributes
+    n=$[ ${#ARGV[@]} - 1 ]
+    PLAYLIST_NAME="${ARGV[${n}]}"
+    PLAYLIST_PATH=`get_playlist_path`
+    
+    check_playlist
+    
+    ## Add songs to the playlist
+    if [[ "${ARGV[0]}" == "-a" || "${ARGV[0]}" == "--add" ]]; then 
+        playlist_add_song "${n}"
+    fi
+    
+    ## Remove songs from the playlist
+    if [[ "${ARGV[0]}" == "-r" || "${ARGV[0]}" == "--remove" ]]; then 
+        playlist_remove_song "${n}"
+    fi
+}
+
+
+
+## List songs in a playlist, or list all playlists
+function music_player_list_music {
+    
+    ## Playlist attributes
+    PLAYLIST_NAME="${ARGV[1]}"
+    PLAYLIST_PATH=`get_playlist_path`
+    
+    ## Print songs/playlists
+    if [ ! -z "${PLAYLIST_NAME}" ]; then
+        
+        ## Look up songs in playlist    
+        check_playlist
+        
+        song_list=(`find "${PLAYLIST_PATH}/"`) 
+        n=$[ ${#song_list} - 1 ]
+        
+        ## Print songs
+        echo ":: Listing songs in '$(basename "${song_list[0]}")'..." 
+        
+        for song in "${song_list[@]:1:$n}"; do
+            echo "$(basename ${song})"
+        done
+    else
+        
+        ## Print playlists
+        echo ":: Listing playlists..."
+        
+        sed "1,1d" "${PLAYLIST_PREF_FILE}"
+    fi
+}
+
+
+
+## Search for a song in the music library
+function music_player_search {
+    music_player_start 
+    library_song_search "${ARGV[1]}"
+    
+    if [ $? -eq 0 ]; then
+        ${MUSIC_PLAYER} -a "${SEARCH_SONG}"
+        ${MUSIC_PLAYER} -p
+    fi
+}
+
+
+
+## Queue songs into the current playlist 
+function music_player_queue {
+    if [ `is_player_running` == false ]; then
+        music_player_start
+    fi
+    
+    library_song_search "${ARGV[1]}"
+    
+    if [ $? -eq 0 ]; then
+        echo -n ":: Adding '$(basename ${SEARCH_SONG})' to the queue..."
+        ${MUSIC_PLAYER} -a "${SEARCH_SONG}"
+        echo "Done."
+    fi
+}
+
+
+
+## Execute commands using the music player
+function music_player_commands {
+    n=$[ ${#ARGV[@]} - 1 ]
+    
+    ${MUSIC_PLAYER} "${ARGV[@]:1:${n}}"
+}
+
+
+
+## Play the playlist
+function music_player_playlist_play {
+    
+    ## Playlist attributes
+    PLAYLIST_NAME="${ARGV[0]}"
+    PLAYLIST_PATH=`get_playlist_path`
+    
+    ## Setup music player
+    check_playlist
+    music_player_start
+    
+    ## Play playlist songs
+    echo -n ":: Playing '${PLAYLIST_NAME}'..."
+    ${MUSIC_PLAYER} -a "${PLAYLIST_PATH}"
+    ${MUSIC_PLAYER} -p
+    echo "Done."
 }
 
 
@@ -440,99 +634,73 @@ function main {
         
         ## Prints program usage
 	    "-h"|"--help") 
-            print_usage 
+            print_usage
             ;;
         
         ## Run music extension setup
         "--setup")
-            echo "Where are your music playlists located?"
-            read -p "> " mp
-            
-            echo "Where is your music library located?"
-            read -p "> " ml
-            
-            if [ ! -z "${mp}" ]; then echo "${mp}" > "${MUSIC_LOG}"; fi
-            if [ ! -z "${ml}" ]; then echo "${ml}" > "${LIBRARY_LOG}"; fi
+            music_setup
             ;;
         
+        ## Start the music player
+        "")
+            echo -n ":: Starting the music player..."
+            music_player_start
+            echo "Done."
+            ;;
         ## Toggle Play/Pause
-	    "-p") ${MUSIC_PLAYER} -G ;;
+	    "-P"|"--play"|"--pause") 
+            music_player_play
+            ;;
         
 	    ## Next Song
-	    "-f") ${MUSIC_PLAYER} -f ;;
+	    "-f"|"--forward") 
+            music_player_forward
+            ;;
         
 	    ## Previous Song
-	    "-b") ${MUSIC_PLAYER} -r ;;
+	    "-p"|"--previous") 
+            music_player_previous
+            ;;
         
 	    ## Print Current Song Information
-	    "-i") ${MUSIC_PLAYER} -i ;;
+	    "-i"|"--info") 
+            music_player_info
+            ;;
 	    
         ## Quit the music player
-        '-x')
-            if `is_player_running`; then
-                ${MUSIC_PLAYER} -x
-            else
-                echo "${PROG_NAME}: '${MUSIC_PLAYER}' is not running."
-                exit 1
-            fi
+        "-x"|"--exit") 
+            music_player_exit
             ;;
         
         ## Add/remove songs from a playlist
-        "-a"|"-r") 
-            
-            ## Playlist attributes
-            local n=$[ ${#ARGV[@]} - 1 ]
-            PLAYLIST_NAME="${ARGV[${n}]}"
-            PLAYLIST_PATH=`playlist_path`
-            
-            ## Choose to add/remove songs from a playlist
-            playlist_verify
-            if [[ "${ARGV[0]}" == "-a" ]]; then playlist_add_song "${n}"; fi
-            if [[ "${ARGV[0]}" == "-r" ]]; then playlist_remove_song "${n}"; fi
+        "-a"|"--add"|"-r"|"--remove") 
+            music_player_playlist_modify
             ;;
         
         ## Print playlist songs
         "-l"|"--list") 
-            
-            ## Playlist attributes
-            PLAYLIST_NAME="${ARGV[1]}"
-            PLAYLIST_PATH=`playlist_path`
-            
-            ## Print playlist songs
-            if [ ! -z "${PLAYLIST_NAME}" ]; then
-                playlist_verify
-                playlist_song_list
-            else
-                print_playlists
-            fi
-	        ;;
+            music_player_list_music
+            ;;
         
         ## Searches For A Song (specified by user)
 	    "-s"|"--search") 
-            player_start 
-            library_song_search
-	        ;;
-        
-        ## Play a playlist
-        "-"*)
-            mocp "${ARGV[@]}"
+            music_player_search
             ;;
         
-	    *)
-            ## Check input
-            if [ -z "${ARGV[0]}" ]; then
-                print_usage
-            fi
-            
-            ## Playlist attributes
-            PLAYLIST_NAME="${ARGV[0]}"
-            PLAYLIST_PATH=`playlist_path`
-            
-            ## Play the input playlist
-            playlist_verify
-            player_start 
-            playlist_play 
-    		;;
+        ## Searches For A Song (specified by user)
+	    "-q"|"--queue") 
+            music_player_queue
+            ;;
+        
+        ## Execute a command using the actual music player
+        "-mp"|"--music-player") 
+            music_player_commands
+            ;;
+        
+	    *) 
+            music_player_playlist_play
+            ;;
     esac
     
     exit 0
