@@ -151,7 +151,9 @@
 ##                          commands using the actual music player. The functions 
 ##                          read in songs (add, remove, search, and queue) now use 
 ##                          the "library_song_search" function so that the user does
-##                          not always have to know the full path of the song.
+##                          not always have to know the full path of the song. Fixed 
+##                          some errors with "grep" usage and also with checking 
+##                          "is_playlist", also due to "grep". 
 ## 
 ## 
 ## NOTICE: 
@@ -228,18 +230,10 @@ function is_player_running {
 
 ## Check if specified playlist key is correct
 function is_playlist {
-    key=`cut -s -f1 -d'-' "${PLAYLIST_PREF_FILE}" \
-             | sed 's/[ \t]*$//' \
-             | grep -x -c "${PLAYLIST_NAME}"`
-    
-    name=`cut -s -f2 -d'-' "${PLAYLIST_PREF_FILE}" \
-              | sed 's/^[ \t]*//' \
-              | grep -x -c "${PLAYLIST_NAME}"`
-    
-    if [ "${key}" -eq 1 -o "${name}" -eq 1 ]; then
-        echo true
-    else
+    if [[ "${PLAYLIST_PATH}" == "Empty" ]]; then
         echo false
+    else
+        echo true
     fi
 }
 
@@ -266,11 +260,31 @@ function check_playlist {
 
 ## Get path to playlist directory
 function get_playlist_path {
-    name=`grep "${PLAYLIST_NAME}" "${PLAYLIST_PREF_FILE}" \
-                    | cut -f2 -d'-' \
-                    | sed 's/^[ \t]*//'`
     
-    if [ ! -z "${name}" ] && [ ! -z "${PLAYLIST_NAME}" ]; then
+    ## Contents of playlist preference file
+    contents=(`sed "1,1d" "${PLAYLIST_PREF_FILE}"`)
+    flag=false
+    
+    ## Go through file line by line
+    for line in "${contents[@]}"; do
+        
+        ## Playlist key and directory name
+        key=`echo "${line}" \
+                 | cut -f1 -d'-' \
+                 | sed 's/[ \t]*$//'`
+        name=`echo "${line}" \
+                  | cut -f2 -d'-' \
+                  | sed 's/^[ \t]*//'`
+        
+        ## Check for match between key or name, and input playlist name
+        if [[ "${key}" == "${PLAYLIST_NAME}" || "${name}" == "${PLAYLIST_NAME}" ]]; then
+            flag=true
+            break
+        fi
+    done
+    
+    ## Return findings
+    if [ ${flag} == true ]; then
 	    echo "${MUSIC_DIR}/${name}"
     else
         echo "Empty"
@@ -351,7 +365,7 @@ function library_song_search {
     fi
     
     ## Songs in library that match search
-    matches=(`find "${LIBRARY_DIR}" | grep -i "${search}"`)
+    matches=(`find "${LIBRARY_DIR}" | grep -i "${search}" 2> /dev/null`)
     
     ## Choose what to do depending on number of matches found
     case ${#matches[@]} in

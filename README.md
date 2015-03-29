@@ -19,6 +19,7 @@ it already:
     - Remove songs from a playlist
     - Print the songs in a playlist
     - Search for a song in the music library and play it.
+    - Queue any song in the music library using the search function.
 
 Further documentation can be found in the header of the program.
 
