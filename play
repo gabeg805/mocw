@@ -155,6 +155,8 @@
 ##                          some errors with "grep" usage and also with checking 
 ##                          "is_playlist", also due to "grep". 
 ## 
+##     gabeg Mar 29 2015 <> Program can now print all songs (from all playlists).
+## 
 ## 
 ## NOTICE: 
 ## 
@@ -207,6 +209,29 @@ function print_usage {
     echo -e "\t[[-l|--list] <playlist>] [[-s|--search] <song>]"
     echo -e "\t[[-q|--queue] <songs>] [[-mp|--music-player] <command>] [<playlist>]"
     exit 1
+}
+
+
+
+## ################################
+## ##### PRINT PLAYLIST SONGS #####
+## ################################
+
+## Print playlist songs
+function print_playlist_songs {
+    
+    ## Look up songs in playlist    
+    check_playlist
+    
+    song_list=(`find "${PLAYLIST_PATH}/"`) 
+    n=$[ ${#song_list[@]} - 1 ]
+    
+    ## Print songs
+    echo ":: Listing songs in '$(basename "${song_list[0]}")'..." 
+    
+    for song in "${song_list[@]:1:${n}}"; do
+        echo "$(basename ${song})"
+    done
 }
 
 
@@ -552,27 +577,33 @@ function music_player_list_music {
     PLAYLIST_PATH=`get_playlist_path`
     
     ## Print songs/playlists
-    if [ ! -z "${PLAYLIST_NAME}" ]; then
-        
-        ## Look up songs in playlist    
-        check_playlist
-        
-        song_list=(`find "${PLAYLIST_PATH}/"`) 
-        n=$[ ${#song_list} - 1 ]
-        
-        ## Print songs
-        echo ":: Listing songs in '$(basename "${song_list[0]}")'..." 
-        
-        for song in "${song_list[@]:1:$n}"; do
-            echo "$(basename ${song})"
-        done
-    else
+    case "${PLAYLIST_NAME}" in
         
         ## Print playlists
-        echo ":: Listing playlists..."
+        "")
+            echo ":: Listing playlists..."
+            
+            sed "1,1d" "${PLAYLIST_PREF_FILE}"
+            ;;
         
-        sed "1,1d" "${PLAYLIST_PREF_FILE}"
-    fi
+        ## Print all songs in each playlist
+        "all")
+            dirs=(`cut -s -f2 -d'-' "${PLAYLIST_PREF_FILE}" | sed 's/^[ \t]*//'`)
+            
+            for playlist in "${dirs[@]}"; do
+                PLAYLIST_NAME="${playlist}"
+                PLAYLIST_PATH="${MUSIC_DIR}/${playlist}"
+                
+                print_playlist_songs
+                echo
+            done
+            ;;
+        
+        ## Print the songs in the given playlist
+        *)
+            print_playlist_songs
+            ;;
+    esac
 }
 
 
