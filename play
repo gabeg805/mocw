@@ -119,7 +119,7 @@ usage() {
     echo -e "\t-h, --help                   Print program usage."
     echo -e "\t--setup                      Run the music player config setup."
     echo
-    echo -e "\t-P, --play, --pause          Toggle play/pause."
+    echo -e "\t-p, --play, --pause          Toggle play/pause."
     echo -e "\t-f --forward                 Play next song."
     echo -e "\t-b --backward                Play previous song."
     echo -e "\t-i, --info                   Print current song information."
