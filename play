@@ -92,10 +92,10 @@ main() {
             music_player_queue "${ARGV[@]}"
             ;;
         "-a"|"--add")
-            playlist_add_song
+            music_player_playlist_add_music "${ARGV[@]}"
             ;;
         "-r"|"--remove") 
-            playlist_remove_song
+            music_player_playlist_remove_music "${ARGV[@]}"
             ;;
         *)
             usage
@@ -318,12 +318,15 @@ music_player_queue() {
 
 
 ## Add songs to the specified playlist
-playlist_add_song() {
-    n=$[ ${#ARGV[@]} - 2 ]
+music_player_playlist_add_music() {
+    n=$[ $# - 1 ]
     PLAYLIST_NAME="${ARGV[${n}]}"
     PLAYLIST_PATH=`get_playlist_path` || exit 1
 
-    for song in "${ARGV[@]:1:${n}}"; do
+    input=("$@")
+    first=1
+    last=$[ ${n} - 1 ]
+    for song in "${input[@]:${first}:${last}}"; do
         song_path="$(pwd)/${song}"
         if [ -f "${song}" ]; then
             if [ -f "${song_path}" ]; then
@@ -345,11 +348,14 @@ playlist_add_song() {
 
 
 ## Remove songs from the specified playlist
-playlist_remove_song() {
-    n=$[ ${#ARGV[@]} - 2 ]
+music_player_playlist_remove_music() {
+    n=$[ $# - 1 ]
     PLAYLIST_NAME="${ARGV[${n}]}"
     PLAYLIST_PATH=`get_playlist_path` || exit 1
 
+    input=("$@")
+    first=1
+    last=$[ ${n} - 1 ]
     for song in "${ARGV[@]:1:${n}}"; do
         song_path="${PLAYLIST_PATH}/$(basename ${song})"
         if [ -f "${song_path}" ]; then
