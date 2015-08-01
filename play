@@ -86,6 +86,9 @@ main() {
         "-q"|"--queue") 
             music_player_queue "${ARGV[@]}"
             ;;
+        "-c"|"--create")
+            music_player_playlist_create "${ARGV[@]}"
+            ;;
         "-a"|"--add")
             music_player_playlist_add_music "${ARGV[@]}"
             ;;
@@ -122,6 +125,7 @@ usage() {
     echo -e "\t-l, --list <list>            Print the songs in the playlist."
     echo -e "\t-s, --search <search>        Search for a song in the library and play it."
     echo -e "\t-q, --queue <queue>          Add songs to the queue."
+    echo -e "\t-c, --create <playlist>      Create the playlist."
     echo -e "\t-a, --add <playlist>         Add songs to the playlist."
     echo -e "\t-r, --remove <playlist>      Remove songs from the playlist."
     echo 
@@ -306,26 +310,30 @@ music_player_queue() {
     done
 }
 
-## Add songs to the specified playlist
-music_player_playlist_add_music() {
-    ## Create a playlist
+## Create a playlist
+music_player_playlist_create() {
     if [ $# -eq 2 ]; then
         echo "Create playlist '${ARGV[1]}'?"
         read -p "> " ans
+
         if [ y"${ans}" = yy ] || [ y"${ans}" = yyes ]; then
             mkdir -v "${ARGV[1]}"
         fi
         exit 0
+    else
+        playlist_error "Incorrect number of parameters."
     fi
+}
 
-    ## Determine playlist information
+## Add songs to the specified playlist
+music_player_playlist_add_music() {
     n=$[ $# - 1 ]
     get_playlist_info "${ARGV[${n}]}"
+
     input=("$@")
     first=1
     last=$[ ${n} - 1 ]
 
-    ## Add songs to a playlist
     for song in "${input[@]:${first}:${last}}"; do
         song_path="$(pwd)/${song}"
         if [ -f "${song}" ]; then
@@ -384,7 +392,7 @@ get_playlist_info() {
 
     ## Empty information
     if [ x"${info}" = x ]; then
-        playlist_error "${info}"
+        playlist_error "No playlist specified."
     fi
 
     ## Search through playlists for a match
@@ -412,10 +420,10 @@ get_playlist_info() {
             num=$[ ${ans} - 1 ]
             matches[0]=${matches[${num}]}
         else
-            playlist_error "${ans}"
+            playlist_error "Invalid playlist choice '${ans}'"
         fi
     else
-        playlist_error "${info}"
+        playlist_error "Invalid playlist '${info}'"
     fi
 
     ## Populate playlist information variables
@@ -518,7 +526,7 @@ is_player_playing() {
 
 ## Display a playlist information error
 playlist_error() {
-    echo "${PROG_NAME}: No information found for '${1}'." 1>&2
+    echo "${PROG_NAME}: ${1}." 1>&2
     exit 1
 }
 
