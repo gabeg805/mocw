@@ -2,8 +2,9 @@
 What is it?
 ===========
 
-Acts as an extension for the Music On Console Player (MOCP), but can be altered
-to act as an extension for any music player.
+An extension for the Music On Console Player (MOCP), adding functionality where
+it was once lacking. It can also be easily modified to act as an extension for
+any music player.
 
 
 
@@ -53,7 +54,7 @@ If you have any problems, feel free to email me at 'gabeg@bu.edu'.
 Potential Problems
 ==================
 
-- If you are receiving an incorrect file path error, check the ".config" files
+- If you are receiving an incorrect file path error, check the ".cfg" files
   in the "config" directory and verify that the paths and playlists are correct.
 
 
@@ -62,4 +63,4 @@ Potential Problems
 To-Do
 =====
 
-- Edit the "playlists.config" file from the command line
+- TBD

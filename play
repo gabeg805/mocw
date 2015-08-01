@@ -25,10 +25,8 @@
 ## GLOBAL VARIABLES
 ## ================
 
-## Change array delimeter
-IFS=$'\n'
-
 ## Program information
+IFS=$'\n'
 ARGV=("$@")
 PROG_NAME=`basename $0`
 PROG_DIR=`echo "$0" | sed "s/\/${PROG_NAME}$//"`
@@ -40,15 +38,12 @@ PLAYLIST_PATH=""
 SEARCH_SONG=""
 
 ## Preference files
-MUSIC_PREF_FILE="${PROG_DIR}/config/music.config"
-LIBRARY_PREF_FILE="${PROG_DIR}/config/lib.config"
-PLAYLIST_PREF_FILE="${PROG_DIR}/config/playlists.config"
+MUSIC_PREF_FILE="${PROG_DIR}/config/music.cfg"
+LIBRARY_PREF_FILE="${PROG_DIR}/config/lib.cfg"
 
 ## Directories
 MUSIC_DIR=`head -1 "${MUSIC_PREF_FILE}"`
 LIBRARY_DIR=`head -1 "${LIBRARY_PREF_FILE}"`
-
-
 
 ## ##################################
 ## ##### MUSIC PLAYER INTERFACE #####
@@ -105,8 +100,6 @@ main() {
     exit 0
 }
 
-
-
 ## #########################
 ## ##### PROGRAM USAGE #####
 ## #########################
@@ -138,8 +131,6 @@ usage() {
     echo -e "\t<search>                     Song to search for."
     echo -e "\t<queue>                      Directory or songs to add to the playlist."
 }
-
-
 
 ## #######################
 ## ##### MUSIC SETUP #####
@@ -174,8 +165,6 @@ music_player_setup() {
     
     exit 0
 }
-
-
 
 ## #################################
 ## ##### DEFAULT MOCP COMMANDS #####
@@ -217,17 +206,13 @@ music_player_exit() {
     ${MUSIC_PLAYER} -x
 }
 
-
-
 ## #########################
 ## ##### PLAY PLAYLIST #####
 ## #########################
 
 ## Play the playlist
 music_player_playlist_play() {
-    PLAYLIST_NAME="${1}"
-    PLAYLIST_PATH=`get_playlist_path` || exit 1
-
+    get_playlist_info "${1}"
     music_player_start
 
     echo -n ":: Playing '${PLAYLIST_NAME}'..."
@@ -235,8 +220,6 @@ music_player_playlist_play() {
     ${MUSIC_PLAYER} -p
     echo "Done."
 }
-
-
 
 ## ################################
 ## ##### PRINT PLAYLIST SONGS #####
@@ -247,11 +230,11 @@ music_player_list_music() {
     case "${1}" in
         "")
             echo ":: Listing playlists..."
-            cat "${PLAYLIST_PREF_FILE}"
+            ls -1 "${MUSIC_DIR}"
             ;;
 
         "all")
-            dirs=(`cut -s -f2 -d'-' "${PLAYLIST_PREF_FILE}" | sed 's/^[ \t]*//'`)
+            dirs=(`ls -1 "${MUSIC_DIR}"`)
             for playlist in "${dirs[@]}"; do
                 PLAYLIST_NAME="${playlist}"
                 PLAYLIST_PATH="${MUSIC_DIR}/${playlist}"
@@ -261,14 +244,22 @@ music_player_list_music() {
             ;;
 
         *)
-            PLAYLIST_NAME="${1}"
-            PLAYLIST_PATH=`get_playlist_path` || exit 1
+            get_playlist_info "${1}"
             print_playlist_songs
             ;;
     esac
 }
 
+## Print playlist songs
+print_playlist_songs() {
+    song_list=(`find "${PLAYLIST_PATH}/"`) 
+    n=$[ ${#song_list[@]} - 1 ]
 
+    echo ":: Listing songs in '$(basename "${song_list[0]}")'..." 
+    for song in "${song_list[@]:1:${n}}"; do
+        echo "$(basename ${song})"
+    done
+}
 
 ## ########################
 ## ##### SONG SEARCH ######
@@ -280,12 +271,12 @@ music_player_search() {
 
     if [ $? -eq 0 ]; then
         music_player_start
+        echo -n ":: Playing '$(basename "${SEARCH_SONG}")'..."
         ${MUSIC_PLAYER} -a "${SEARCH_SONG}"
         ${MUSIC_PLAYER} -p
+        echo "Done."
     fi
 }
-
-
 
 ## #############################
 ## ##### ADD/REMOVE SONGS ######
@@ -315,17 +306,26 @@ music_player_queue() {
     done
 }
 
-
-
 ## Add songs to the specified playlist
 music_player_playlist_add_music() {
-    n=$[ $# - 1 ]
-    PLAYLIST_NAME="${ARGV[${n}]}"
-    PLAYLIST_PATH=`get_playlist_path` || exit 1
+    ## Create a playlist
+    if [ $# -eq 2 ]; then
+        echo "Create playlist '${ARGV[1]}'?"
+        read -p "> " ans
+        if [ y"${ans}" = yy ] || [ y"${ans}" = yyes ]; then
+            mkdir -v "${ARGV[1]}"
+        fi
+        exit 0
+    fi
 
+    ## Determine playlist information
+    n=$[ $# - 1 ]
+    get_playlist_info "${ARGV[${n}]}"
     input=("$@")
     first=1
     last=$[ ${n} - 1 ]
+
+    ## Add songs to a playlist
     for song in "${input[@]:${first}:${last}}"; do
         song_path="$(pwd)/${song}"
         if [ -f "${song}" ]; then
@@ -345,13 +345,10 @@ music_player_playlist_add_music() {
     done
 }
 
-
-
 ## Remove songs from the specified playlist
 music_player_playlist_remove_music() {
     n=$[ $# - 1 ]
-    PLAYLIST_NAME="${ARGV[${n}]}"
-    PLAYLIST_PATH=`get_playlist_path` || exit 1
+    get_playlist_info "${ARGV[${n}]}"
 
     input=("$@")
     first=1
@@ -363,8 +360,6 @@ music_player_playlist_remove_music() {
         fi
     done
 }
-
-
 
 ## ##################################
 ## ##### MUSIC PLAYER UTILITIES #####
@@ -381,22 +376,52 @@ music_player_start() {
     fi 
 }
 
+## Verify playlist name and playlist path
+get_playlist_info() {
+    info="${1}"
+    playlists=(`ls -1 "${MUSIC_DIR}"`)
+    matches=()
 
+    ## Empty information
+    if [ x"${info}" = x ]; then
+        playlist_error "${info}"
+    fi
 
-## Print playlist songs
-print_playlist_songs() {
-    verify_playlist
-
-    song_list=(`find "${PLAYLIST_PATH}/"`) 
-    n=$[ ${#song_list[@]} - 1 ]
-
-    echo ":: Listing songs in '$(basename "${song_list[0]}")'..." 
-    for song in "${song_list[@]:1:${n}}"; do
-        echo "$(basename ${song})"
+    ## Search through playlists for a match
+    for item in "${playlists[@]}"; do
+        found=`echo "${item}" | grep -i "${info}"`
+        if [ x"${found}" != x ]; then
+            matches+=("${found}")
+        fi
     done
+
+    ## Determine match
+    if [ ${#matches[@]} -eq 1 ]; then
+        :
+    elif [ ${#matches[@]} -gt 0 ]; then
+        echo "Found multiple playlists matching '${info}'."
+        echo "Choose a playlist:"
+        echo "${matches[*]}" | grep --color -n ""
+        echo 
+        read -p "> " ans
+
+        if [ x"${ans}" != x ] \
+               && [ ${ans} -eq ${ans} ] 2> /dev/null \
+               && [ ${ans} -gt 0 -a ${ans} -le ${#matches[@]} ]
+        then
+            num=$[ ${ans} - 1 ]
+            matches[0]=${matches[${num}]}
+        else
+            playlist_error "${ans}"
+        fi
+    else
+        playlist_error "${info}"
+    fi
+
+    ## Populate playlist information variables
+    PLAYLIST_NAME="${matches[0]}"
+    PLAYLIST_PATH="${MUSIC_DIR}/${PLAYLIST_NAME}"
 }
-
-
 
 ## Search for a song in the library
 library_song_search() {
@@ -413,7 +438,7 @@ library_song_search() {
     fi
     
     ## Songs in library that match search
-    matches=(`find "${LIBRARY_DIR}" -iname "*${search}*"`)
+    matches=(`find  "${LIBRARY_DIR}" -nowarn -iname "*${search}*"`)
     case ${#matches[@]} in
         0)
             echo -e "${PROG_NAME}: No songs found matching '${search}'."
@@ -459,36 +484,6 @@ library_song_search() {
     return 0
 }
 
-
-
-## Get path to playlist directory
-get_playlist_path() {
-    contents=(`sed "1,1d" "${PLAYLIST_PREF_FILE}"`)
-    flag=false
-    
-    for line in "${contents[@]}"; do
-        key=`echo "${line}" \
-                 | cut -f1 -d'-' \
-                 | sed 's/[ \t]*$//'`
-        name=`echo "${line}" \
-                  | cut -f2 -d'-' \
-                  | sed 's/^[ \t]*//'`
-
-        if [[ "${key}" == "${PLAYLIST_NAME}" || "${name}" == "${PLAYLIST_NAME}" ]]; then
-            flag=true
-            break
-        fi
-    done
-
-    if [ ${flag} == true ]; then
-        echo "${MUSIC_DIR}/${name}"
-    else
-        verify_playlist 1>&2
-    fi
-}
-
-
-
 ## #####################################
 ## ##### CHECK MUSIC PLAYER STATUS #####
 ## #####################################
@@ -502,8 +497,6 @@ is_player_running() {
         echo true
     fi
 }
-
-
 
 ## Check if music player is running
 is_player_playing() {
@@ -523,33 +516,11 @@ is_player_playing() {
     echo "${ret}"
 }
 
-
-
-## Check if specified playlist is correct
-is_playlist() {
-    if [ -z "${PLAYLIST_PATH}" ]; then
-        echo false
-    else
-        echo true
-    fi
+## Display a playlist information error
+playlist_error() {
+    echo "${PROG_NAME}: No information found for '${1}'." 1>&2
+    exit 1
 }
-
-
-
-## Check input playlist abbreviation
-verify_playlist() {
-    if [ "$(is_playlist)" == false ]; then
-        echo "${PROG_NAME}: No playlist found for '${PLAYLIST_NAME}'."
-        exit 1
-    fi
-
-    if [ ! -d "${PLAYLIST_PATH}" ]; then 
-        echo "${PROG_NAME}: Directory path for '${PLAYLIST_NAME}' does not exist."
-        exit 1
-    fi
-}
-
-
 
 ## ======================
 ## Run the MOCP Extension
