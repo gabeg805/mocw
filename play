@@ -446,7 +446,7 @@ library_song_search() {
     fi
     
     ## Songs in library that match search
-    matches=(`find  "${LIBRARY_DIR}" -nowarn -iname "*${search}*"`)
+    matches=(`find ./ "${LIBRARY_DIR}" -nowarn -iname "*${search}*"`)
     case ${#matches[@]} in
         0)
             echo -e "${PROG_NAME}: No songs found matching '${search}'."
