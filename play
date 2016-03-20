@@ -1,29 +1,29 @@
 #!/bin/bash
-## **********************************************************************************
-## 
-## Name:    play
-## Author:  Gabriel Gonzalez, MOCP Developers
-## Email:   gabeg@bu.edu
-## License: The MIT License (MIT)
-## 
-## Syntax: play [option] [argument]
-##         
-## Description: Music On Console Player (MOCP) extension, capable of creating
-##              playlists, adding/removing songs from a playlist, list songs in
-##              a playlist, queue songs en masse, and more!
-## 
-## Notes: None.
-## 
-## Notice: I did not write any of the MOCP software, thus I cannot take credit
-##         for that code. The MOCP license might not use The MIT License (MIT),
-##         thus this license only applies to the lines of code that do not
-##         contain the "mocp" command.
-## 
-## **********************************************************************************
+# ******************************************************************************
+# 
+# Name:    play
+# Author:  Gabriel Gonzalez, MOCP Developers
+# Email:   gabeg@bu.edu
+# License: The MIT License (MIT)
+# 
+# Syntax: play [option] [argument]
+#         
+# Description: Music On Console Player (MOCP) extension, capable of creating
+#              playlists, adding/removing songs from a playlist, list songs in
+#              a playlist, queue songs en masse, and more!
+# 
+# Notes: None.
+# 
+# Notice: I did not write any of the MOCP software, thus I cannot take credit
+#         for that code. The MOCP license might not use The MIT License (MIT),
+#         thus this license only applies to the lines of code that do not
+#         contain the "mocp" command.
+# 
+# ******************************************************************************
 
-## ================
-## GLOBAL VARIABLES
-## ================
+# ================
+# GLOBAL VARIABLES
+# ================
 
 ## Program information
 IFS=$'\n'
@@ -444,9 +444,10 @@ library_song_search() {
             return
         fi
     fi
-    
+
     ## Songs in library that match search
-    matches=(`find ./ "${LIBRARY_DIR}" -nowarn -iname "*${search}*"`)
+    matches=(`find "${LIBRARY_DIR}" -nowarn -iname "*${search}*"` \
+             `find . -maxdepth 1 -nowarn -iname "*${search}*"`)
     case ${#matches[@]} in
         0)
             echo -e "${PROG_NAME}: No songs found matching '${search}'."
