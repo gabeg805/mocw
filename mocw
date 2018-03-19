@@ -1,0 +1,773 @@
+#!/bin/bash
+# ------------------------------------------------------------------------------
+# 
+# Name:    mocw
+# Author:  Gabriel Gonzalez, MOC Developers
+# Email:   gabeg@bu.edu
+# License: The MIT License (MIT)
+# 
+# Syntax: mocw [option] [argument]
+# 
+# Description: Music On Console Player (MOCP) extension, capable of creating
+#              playlists, adding/removing songs from a playlist, list songs in
+#              a playlist, queue songs en masse, and more!
+# 
+# Notes: None.
+# 
+# Notice: I did not write any of the MOCP software, thus I cannot take credit
+#         for that code. The MOCP license might not use The MIT License (MIT),
+#         thus this license only applies to the lines of code that do not
+#         contain the "mocp" command.
+# 
+# ------------------------------------------------------------------------------
+
+# Globals
+PROGRAM="${0##*/}"
+PROGDIR=$(dirname "$(readlink -f "${0}")")
+PROGSHAREDIR="${HOME}/.local/share/${PROGRAM}"
+PLAYLISTDIR="${PROGSHAREDIR}/playlist"
+LIBRARYDIR="${PROGSHAREDIR}/library"
+RESPONSEFILE="${PROGSHAREDIR}/response.txt"
+MUSIC_PLAYER="mocp"
+IFS=$'\n'
+
+# Options
+VERBOSE=true
+
+# Source utility
+. "${PROGDIR}/../lib/bash/util.sh"
+
+##
+# Music On Console Wrapper
+#
+main()
+{
+    # Setup options
+    if [ $# -eq 0 ]; then
+        usage
+        exit 0
+    fi
+
+    short="hvsxpNPq:il:s:c:a:d:"
+    long="help,verbose,install,uninstall,start,stop,play,pause,next,previous,queue:,playlist:,info,list:,search:,create:,add:,delete:"
+    args=$(getopt -o "${short}" --long "${long}" --name "${PROG}" -- "${@}")
+
+    if [ $? -ne 0 ]; then
+        usage
+        exit 1
+    fi
+
+    eval set -- "${args}"
+
+    # Define options
+    local PARSED=
+    local INSTALL=
+    local UNINSTALL=
+    local START=
+    local STOP=
+    local PLAYPAUSE=
+    local NEXT=
+    local PREVIOUS=
+    local QUEUE=()
+    local PLAYLIST=
+    local INFO=
+    local LIST=
+    local SEARCH=
+    local CREATE=
+    local ADD=
+    local DELETE=
+
+    # Parse options
+    while true; do
+        case "${1}" in
+            # Usage
+            -h|--help)
+                usage
+                exit 0
+                ;;
+
+            --install)
+                INSTALL=true
+                ;;
+
+            --uninstall)
+                UNINSTALL=true
+                ;;
+
+            -s|--start)
+                START=true
+                ;;
+
+            -x|--stop)
+                STOP=true
+                ;;
+
+            -p|--play|--pause)
+                PLAYPAUSE=true
+                ;;
+
+            -N|--next)
+                NEXT=true
+                ;;
+
+            -P|--previous)
+                PREVIOUS=true
+                ;;
+
+            -q|--queue)
+                shift
+                QUEUE+=("${1}")
+                ;;
+
+            -P|--playlist)
+                shift
+                PLAYLIST="${1}"
+                ;;
+
+            -i|--info)
+                INFO=true
+                ;;
+
+            -l|--list)
+                shift
+                LIST="${1}"
+                ;;
+
+            -s|--search)
+                shift
+                SEARCH="${1}"
+                ;;
+
+            -c|--create)
+                shift
+                CREATE="${1}"
+                ;;
+
+            -a|--add)
+                shift
+                ADD="${1}"
+                ;;
+
+            -d|--delete)
+                shift
+                DELETE="${1}"
+                ;;
+
+            -v|--verbose)
+                VERBOSE=true
+                ;;
+
+            # End of options
+            --)
+                break
+                ;;
+        esac
+
+        shift
+        PARSED=true
+    done
+
+    # Run options
+    if [ -z "${PARSED}" ]; then
+        print_err "No options specified. See '--help' for more information."
+        exit ${EARG}
+    elif [ -n "${INSTALL}" ]; then
+        install
+    elif [ -n "${UNINSTALL}" ]; then
+        uninstall
+    else
+        # Make sure library and playlist directories exist
+        if [ ! -d "${LIBRARYDIR}" -o ! -d "${PLAYLISTDIR}" ]; then
+            print_err "Music playlists or library could not be found."
+            print_err "Run '--install' to setup."
+            exit 1
+        fi
+
+        # Check the rest of the options
+        if [ -n "${LIST}" ]; then
+            list_playlist "${LIST}"
+        elif [ -n "${SEARCH}" ]; then
+            song_search "${SEARCH}"
+        elif [ -n "${CREATE}" ]; then
+            create_playlist "${CREATE}"
+        elif [ -n "${ADD}" ]; then
+            add_music_to_playlist "${ADD}"
+        elif [ -n "${DELETE}" ]; then
+            delete_playlist_music "${DELETE}"
+        elif [ -n "${START}" ]; then
+            start_player
+        else
+            if ! is_music_player_running; then
+                print_info "Music On Console player not running."
+                return 2
+            fi
+
+            if [ -n "${STOP}" ]; then
+                stop_player
+            elif [ -n "${PLAYPAUSE}" ]; then
+                toggle_play_and_pause
+            elif [ -n "${NEXT}" ]; then
+                next_song
+            elif [ -n "${PREVIOUS}" ]; then
+                previous_song
+            elif [ -n "${QUEUE[*]}" ]; then
+                queue_song "${QUEUE[@]}"
+            elif [ -n "${PLAYLIST}" ]; then
+                play_playlist "${PLAYLIST}"
+            elif [ -n "${INFO}" ]; then
+                print_song_info
+            else
+                :
+            fi
+        fi
+    fi
+}
+
+##
+# Print program usage
+#
+usage()
+{
+    echo "Usage: ${PROGRAM} [option] [argument]"
+    echo
+    echo "Options:"
+    echo "    -h, --help"
+    echo "        Print program usage."
+    echo
+    echo "    --install"
+    echo "        Install the Music On Console Wrapper configuration files."
+    echo "        These files are installed in: ~/.local/share/mocw/"
+    echo
+    echo "    --uninstall"
+    echo "        Uninstall the Music On Console Wrapper configuration files."
+    echo
+    echo "    -s, --start"
+    echo "        Start the Music On Console player."
+    echo
+    echo "    -x, --stop"
+    echo "        Start the Music On Console player."
+    echo
+    echo "    -p, --play, --pause"
+    echo "        Toggle play/pause."
+    echo
+    echo "    -N, --next"
+    echo "        Play the next song on the track."
+    echo
+    echo "    -P, --previous"
+    echo "        Play the previous song on the track."
+    echo
+    echo "    -q, --queue <song(s)>"
+    echo "        Queue the specified songs, but do not play them."
+    echo
+    echo "    --playlist <playlist>"
+    echo "        Play the specified playlist."
+    echo
+    echo "    -i, --info"
+    echo "        Print information about the song currently being played."
+    echo
+    echo "    -l, --list <playlist>"
+    echo "        List the songs that are in that playlist."
+    echo
+    echo "    -S, --search <song>"
+    echo "        Search for a song in the library. Prompt the user if they"
+    echo "        would like to play it or not."
+    echo
+    echo "    -c, --create <playlist>"
+    echo "        Create the playlist."
+    echo
+    echo "    -a, --add <playlist>"
+    echo "        Add songs to the playlist. Create the playlist, if it does"
+    echo "        not already exist."
+    echo
+    echo "    -d, --delete <playlist>"
+    echo "        Delete songs from the playlist."
+    echo
+    echo "Arguments:"
+    echo "    <song>"
+    echo "        A song name (case-insensitive)."
+    echo
+    echo "    <song(s)>"
+    echo "        Comma-separated list of songs (case-sensitive)."
+    echo
+    echo "    <playlist>"
+    echo "        The name of a playlist."
+}
+
+##
+# Install playlist and library configuration files under user's home
+#
+install()
+{
+    local playlist=
+    local library=
+
+    # Create share dir
+    print_info "Creating local directory in home."
+    mkdir -pv "${PROGSHAREDIR}"
+
+    # Save playlist file
+    echo "Where are your music playlists located?"
+    read -p "> " playlist
+
+    if [ ! -d "${playlist}" ]; then
+        print_err "Directory '${playlist}' does not exist."
+        return 1
+    fi
+
+    print_info "Saving music playlist location."
+    ln -sv "${playlist}" "${PLAYLISTDIR}"
+    # echo "${playlist}" > "${PLAYLISTFILE}"
+
+    # Save library file
+    echo "Where is your music library located?"
+    read -p "> " library
+
+    if [ ! -d "${library}" ]; then 
+        print_err "Directory '${library}' does not exist."
+        return 2
+    fi
+
+    print_info "Saving music library location."
+    ln -sv "${library}" "${LIBRARYDIR}"
+    # echo "${library}" > "${LIBRARYFILE}"
+}
+
+##
+# Uninstall configuration files under user's home
+#
+uninstall()
+{
+    print_info "Uninstalling Music On Console Wrapper."
+    rm -rfv "${PROGSHAREDIR}"
+}
+
+##
+# Start the music player
+#
+start_player()
+{
+    if ! is_music_player_running; then
+        print_info "Starting Music On Console player."
+        ${MUSIC_PLAYER} -S
+        ${MUSIC_PLAYER} -c
+    else
+        print_info "Music On Console player already running."
+    fi
+}
+
+##
+# Stop the music player
+#
+stop_player()
+{
+    print_info "Stopping Music On Console player."
+    ${MUSIC_PLAYER} -x
+}
+
+##
+# Toggle play/pause
+#
+toggle_play_and_pause()
+{
+    print_info "Toggling play/pause."
+    ${MUSIC_PLAYER} -G
+}
+
+##
+# Play next song
+#
+next_song()
+{
+    print_info "Playing next song."
+    ${MUSIC_PLAYER} -f
+}
+
+##
+# Play previous song
+#
+previous_song()
+{
+    print_info "Playing previous song."
+    ${MUSIC_PLAYER} -r
+}
+
+
+##
+# Queue songs into the current playlist
+#
+queue_song()
+{
+    local songs=("${@}")
+    local queue=
+
+    for search in "${songs[@]}"; do
+        local results=($(search_library_for_song "${search}"))
+        local num=${#results[@]}
+
+        if [ ${num} -eq 0 ]; then
+            print_err "No results found for '${search}'."
+            exit 1
+        elif [ ${num} -eq 1 ]; then
+            queue="${results[0]}"
+        else
+            prompt_search_results "song" "${search}" "${results[@]}"
+            queue="$(read_response_file)"
+        fi
+
+        print_info "Queuing '$(basename ${queue})'."
+        ${MUSIC_PLAYER} -a "${queue}"
+
+        if [ "${search}" != "${songs[-1]}" ]; then
+            echo
+        fi
+    done
+}
+
+##
+# Play the specified playlist
+#
+play_playlist()
+{
+    local search="${1}"
+    local results=($(search_for_playlist "${search}"))
+    local num=${#results[@]}
+    local play=
+
+    if [ ${num} -eq 0 ]; then
+        print_err "No results found for '${search}'."
+        exit 1
+    elif [ ${num} -eq 1 ]; then
+        play="${results[0]}"
+    else
+        prompt_search_results "playlist" "${search}" "${results[@]}"
+        play="$(read_response_file)"
+    fi
+
+    print_info "Playing '$(basename ${play})'."
+    ${MUSIC_PLAYER} -c
+    ${MUSIC_PLAYER} -a "${play}"
+    ${MUSIC_PLAYER} -p
+}
+
+##
+# Print information on the current song being played
+#
+print_song_info()
+{
+    print_info "Current song information:"
+    ${MUSIC_PLAYER} -i
+}
+
+##
+# List songs in a playlist, or list all playlists
+#
+list_playlist()
+{
+    local playlist="${1}"
+    case "${playlist}" in
+        [aA][lL][lL])
+            print_info "Playlists:"
+            for p in "${PLAYLISTDIR}/"*; do
+                if [ -d "${p}" ]; then
+                    print_info "$(basename "${p}")"
+                fi
+            done
+            ;;
+
+        *)
+            if ! is_playlist "${playlist}"; then
+                print_err "No such playlist '${playlist}' exists."
+                exit 1
+            fi
+
+            print_info "Songs in '$(basename "${playlist}")':" 
+            for s in "${PLAYLISTDIR}/${playlist}/"*; do
+                print_info "$(basename ${s})"
+            done
+            ;;
+    esac
+}
+
+##
+# Search for a song in the music library
+#
+song_search()
+{
+    local search="${1}"
+    local results=($(search_library_for_song "${search}"))
+    local num=${#results[@]}
+    local play=
+
+    if [ ${num} -eq 0 ]; then
+        print_err "No results found for '${search}'."
+        exit 1
+    elif [ ${num} -eq 1 ]; then
+        play="${results[0]}"
+    else
+        prompt_search_results "song" "${search}" "${results[@]}"
+        play="$(read_response_file)"
+    fi
+
+    print_info "Playing '$(basename ${play})'."
+    ${MUSIC_PLAYER} -c
+    ${MUSIC_PLAYER} -a "${queue}"
+}
+
+# --------------------------------------------------------------------------
+##
+# Create a playlist
+#
+create_playlist()
+{
+    if [ $# -eq 2 ]; then
+        echo "Create playlist '${ARGV[1]}'?"
+        read -p "> " ans
+
+        if [ y"${ans}" = yy ] || [ y"${ans}" = yyes ]; then
+            mkdir -v "${ARGV[1]}"
+        fi
+        exit 0
+    else
+        playlist_error "Incorrect number of parameters."
+    fi
+}
+
+## Add songs to the specified playlist
+music_player_playlist_add_music() {
+    n=$[ $# - 1 ]
+    get_playlist_info "${ARGV[${n}]}"
+
+    input=("$@")
+    first=1
+    last=$[ ${n} - 1 ]
+
+    for song in "${input[@]:${first}:${last}}"; do
+        song_path="$(pwd)/${song}"
+        if [ -f "${song}" ]; then
+            if [ -f "${song_path}" ]; then
+                loc="${song_path}"
+            else
+                loc="${song}"
+            fi
+
+            ln -v -s "${loc}" "${PLAYLIST_PATH}/$(basename ${song})"
+        else
+            search_library_for_song "${song}"
+            if [ $? -eq 0 ]; then
+                ln -v -s "${SEARCH_SONG}" "${PLAYLIST_PATH}/$(basename ${SEARCH_SONG})"
+            fi
+        fi
+    done
+}
+
+## Remove songs from the specified playlist
+music_player_playlist_remove_music() {
+    n=$[ $# - 1 ]
+    get_playlist_info "${ARGV[${n}]}"
+
+    input=("$@")
+    first=1
+    last=$[ ${n} - 1 ]
+    for song in "${ARGV[@]:1:${n}}"; do
+        song_path="${PLAYLIST_PATH}/$(basename ${song})"
+        if [ -f "${song_path}" ]; then
+            rm -i "${song_path}"
+        fi
+    done
+}
+
+## Start the music player (why would I do this first option if I just want the player started?)
+music_player_start() {
+    if [ "$(is_music_player_running)" == true ]; then
+        ${MUSIC_PLAYER} -c
+    else
+        ${MUSIC_PLAYER} -S 1>/dev/null
+        ${MUSIC_PLAYER} -c
+        ${MUSIC_PLAYER} -t shuffle 
+    fi 
+}
+
+##
+# Search for the playlist
+#
+search_for_playlist()
+{
+    local search="${1}"
+
+    if [ -d "${PLAYLISTDIR}/${search}" ]; then
+        echo "${PLAYLISTDIR}/${search}"
+    elif [ -d "./${search}" ]; then
+        echo "./${search}"
+    else
+        get_playlist_searches "${search}"
+    fi
+
+    return 0
+}
+
+##
+# Search for a song in the library
+#
+search_library_for_song()
+{
+    local search="${1}"
+
+    if [ -f "${search}" ]; then
+        echo "${search}"
+    else
+        get_song_searches "${search}"
+    fi
+}
+
+##
+# Print search results from playlist/song search
+#
+print_search_results()
+{
+    local search="${1}"
+    shift
+    local results=("${@}")
+    local num=${#results[@]}
+    local r=
+
+    if [ ${num} -gt 20 ]; then
+        print_err "Too many results found for '${s}'."
+        exit 1
+    fi
+
+    echo "Results for search '${search}':"
+    for r in "${results[@]}"; do
+        echo "$(basename ${r})"
+    done | grep -n --color=always ""
+    echo
+}
+
+##
+# Prompt user with search results
+#
+prompt_search_results()
+{
+    local prompt="${1}"
+    local search="${2}"
+    shift
+    shift
+    local results=("${@}")
+    local num=${#results[@]}
+    local response=
+
+    # Print results
+    print_search_results "${search}" "${results[@]}"
+    echo "What ${prompt} would you like to play? Hit [ENTER] to skip."
+    read -p "> " response
+
+    # Check user input
+    if [ -z "${response}" ]; then
+        exit 0
+    fi
+    if ! is_integer "${response}" \
+            || [ ${response} -lt 1 -o ${response} -gt ${num} ]
+    then
+        print_err "Invalid input '${response}'."
+        exit 1
+    fi
+
+    # Save result
+    echo "${results[$[${response}-1]]}" > "${RESPONSEFILE}"
+}
+
+##
+# Read response file
+#
+read_response_file()
+{
+    head -1 "${RESPONSEFILE}"
+}
+
+##
+# Return current working directory song matches
+#
+get_current_directory_songs()
+{
+    find . -maxdepth 1 -nowarn -type f -iname "*${1}*"
+}
+
+##
+# Return library song matches
+#
+get_library_songs()
+{
+    find -L "${LIBRARYDIR}" -nowarn -type f -iname "*${1}*"
+}
+
+##
+# Return search songs
+#
+get_song_searches()
+{
+    local search="${1}"
+    local matches=($(get_current_directory_songs "${search}"))
+
+    if [ ${#matches[@]} -eq 0 ]; then
+        matches=($(get_library_songs "${search}"))
+
+        if [ ${#matches[@]} -eq 0 ]; then
+            return
+        fi
+    fi
+
+    echo "${matches[*]}"
+}
+
+##
+# Return playlists in the playlist directory
+#
+get_playlist_dir_searches()
+{
+    find -L "${PLAYLISTDIR}" -nowarn -type d -iname "*${1}*"
+}
+
+##
+# Return playlist searches
+#
+get_playlist_searches()
+{
+    local search="${1}"
+    local matches=($(get_playlist_dir_searches "${search}"))
+
+    if [ ${#matches[@]} -eq 0 ]; then
+        return
+    fi
+
+    echo "${matches[*]}"
+}
+
+##
+# Check if music player is running
+#
+is_music_player_running()
+{
+    local running=$(pgrep -c "${MUSIC_PLAYER}")
+    if [ ${running} -gt 0 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+##
+# Check if input is a playlist
+#
+is_playlist()
+{
+    local playlist="${1}"
+    if [ -d "${PLAYLISTDIR}/${playlist}" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+##
+# Run program
+#
+main "${@}"

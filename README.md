@@ -1,16 +1,10 @@
-===========
-What is it?
-===========
+# Music On Console Wrapper (MOCW)
+
+## What is it?
 
 An extension for the Music On Console Player (MOCP), adding functionality where
 it was once lacking. It can also be easily modified to act as an extension for
 any music player.
-
-
-
-=============
-Documentation
-=============
 
 This program adds the following functionality to a music player, if it doesn't
 have it already:
@@ -24,43 +18,10 @@ have it already:
 
 Further documentation can be found in the header of the program.
 
+## Dependencies
 
+- moc
 
-============
-Installation
-============
+## Install
 
-Install the Music On Console Player:
-    
-    # pacman -S moc
-
-Update your PATH environment variable in your shell rc file with:
-    
-    $ export PATH="${PATH}":"/PATH/TO/PROGRAM/play"
-
-Now the program is ready for use!
-
-
-
-========
-Contacts
-========
-
-If you have any problems, feel free to email me at 'gabeg@bu.edu'.
-
-
-
-==================
-Potential Problems
-==================
-
-- If you are receiving an incorrect file path error, check the ".cfg" files
-  in the "config" directory and verify that the paths and playlists are correct.
-
-
-
-=====
-To-Do
-=====
-
-- TBD
+N/A
