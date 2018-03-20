@@ -74,8 +74,8 @@ main()
     local LIST=
     local SEARCH=
     local CREATE=
-    local ADD=
-    local DELETE=
+    local ADD=()
+    local DELETE=()
 
     # Parse options
     while true; do
@@ -145,12 +145,12 @@ main()
 
             -a|--add)
                 shift
-                ADD="${1}"
+                ADD+=("${1}")
                 ;;
 
             -d|--delete)
                 shift
-                DELETE="${1}"
+                DELETE+=("${1}")
                 ;;
 
             -v|--verbose)
@@ -190,10 +190,10 @@ main()
             song_search "${SEARCH}"
         elif [ -n "${CREATE}" ]; then
             create_playlist "${CREATE}"
-        elif [ -n "${ADD}" ]; then
-            add_music_to_playlist "${ADD}"
-        elif [ -n "${DELETE}" ]; then
-            delete_playlist_music "${DELETE}"
+        elif [ -n "${ADD[*]}" ]; then
+            add_music_to_playlist "${PLAYLIST}" "${ADD[@]}"
+        elif [ -n "${DELETE[*]}" ]; then
+            delete_music_from_playlist "${PLAYLIST}" "${DELETE[@]}"
         elif [ -n "${START}" ]; then
             start_player
         else
@@ -245,7 +245,7 @@ usage()
     echo "        Start the Music On Console player."
     echo
     echo "    -x, --stop"
-    echo "        Start the Music On Console player."
+    echo "        Stop the Music On Console player."
     echo
     echo "    -p, --play, --pause"
     echo "        Toggle play/pause."
@@ -256,41 +256,44 @@ usage()
     echo "    -P, --previous"
     echo "        Play the previous song on the track."
     echo
-    echo "    -q, --queue <song(s)>"
-    echo "        Queue the specified songs, but do not play them."
+    echo "    -q, --queue=<song>"
+    echo "        Add the song to the queue. Use more than once to queue more"
+    echo "        songs."
     echo
-    echo "    --playlist <playlist>"
-    echo "        Play the specified playlist."
+    echo "    --playlist=<playlist>"
+    echo "        Play the specified playlist. If used with '--add' or"
+    echo "        '--delete', then add or delete songs from this playlist."
     echo
     echo "    -i, --info"
     echo "        Print information about the song currently being played."
     echo
-    echo "    -l, --list <playlist>"
-    echo "        List the songs that are in that playlist."
+    echo "    -l, --list=<playlist>"
+    echo "        List the songs that are in this playlist. Entering 'all' will"
+    echo "        list all songs in all playlists."
     echo
-    echo "    -S, --search <song>"
-    echo "        Search for a song in the library. Prompt the user if they"
-    echo "        would like to play it or not."
+    echo "    -S, --search=<song>"
+    echo "        Search for a song in the library and play it. If multiple"
+    echo "        results found, prompt the user which one to play."
     echo
-    echo "    -c, --create <playlist>"
+    echo "    -c, --create=<playlist>"
     echo "        Create the playlist."
     echo
-    echo "    -a, --add <playlist>"
-    echo "        Add songs to the playlist. Create the playlist, if it does"
-    echo "        not already exist."
+    echo "    -a, --add=<song>"
+    echo "        Add a song to a playlist, and use more than once to add more"
+    echo "        songs. Must be used in conjunction with '--playlist' to"
+    echo "        specify a playlist."
     echo
-    echo "    -d, --delete <playlist>"
-    echo "        Delete songs from the playlist."
+    echo "    -d, --delete=<song>"
+    echo "        Delete a song from a playlist, and use more than once to"
+    echo "        delete more songs. Must be used in conjunction with"
+    echo "        '--playlist' to specify a playlist."
     echo
     echo "Arguments:"
     echo "    <song>"
     echo "        A song name (case-insensitive)."
     echo
-    echo "    <song(s)>"
-    echo "        Comma-separated list of songs (case-sensitive)."
-    echo
     echo "    <playlist>"
-    echo "        The name of a playlist."
+    echo "        Name of a playlist."
 }
 
 ##
@@ -466,10 +469,12 @@ list_playlist()
     local playlist="${1}"
     case "${playlist}" in
         [aA][lL][lL])
-            print_info "Playlists:"
             for p in "${PLAYLISTDIR}/"*; do
                 if [ -d "${p}" ]; then
-                    print_info "$(basename "${p}")"
+                    print_info "Songs in '$(basename "${p}")':"
+                    for s in "${p}/"*; do
+                        print_info "$(basename ${s})"
+                    done
                 fi
             done
             ;;
@@ -480,7 +485,7 @@ list_playlist()
                 exit 1
             fi
 
-            print_info "Songs in '$(basename "${playlist}")':" 
+            print_info "Songs in '$(basename "${playlist}")':"
             for s in "${PLAYLISTDIR}/${playlist}/"*; do
                 print_info "$(basename ${s})"
             done
@@ -513,78 +518,91 @@ song_search()
     ${MUSIC_PLAYER} -a "${queue}"
 }
 
-# --------------------------------------------------------------------------
 ##
 # Create a playlist
 #
 create_playlist()
 {
-    if [ $# -eq 2 ]; then
-        echo "Create playlist '${ARGV[1]}'?"
-        read -p "> " ans
+    local playlist="${1}"
+    local response=
+    if is_playlist "${playlist}"; then
+        print_err "Playlist '${playlist}' already exists."
+        exit 1
+    fi
 
-        if [ y"${ans}" = yy ] || [ y"${ans}" = yyes ]; then
-            mkdir -v "${ARGV[1]}"
+    echo "Create playlist '${playlist}'? Hit [ENTER] to skip."
+    read -p "(y/n)> " response
+
+    if [ "${response}" == "y" ]; then
+        mkdir -p "${PLAYLISTDIR}/${playlist}"
+        if [ $? -eq 0 ]; then
+            print_info "Successfully created playlist."
+        else
+            print_err "Unable to create playlist."
         fi
-        exit 0
-    else
-        playlist_error "Incorrect number of parameters."
     fi
 }
 
-## Add songs to the specified playlist
-music_player_playlist_add_music() {
-    n=$[ $# - 1 ]
-    get_playlist_info "${ARGV[${n}]}"
+##
+# Add songs to the specified playlist
+#
+add_music_to_playlist()
+{
+    local playlist="${1}"
+    if [ -z "${playlist}" ]; then
+        print_err "Must specify a playlist with '--playlist'."
+        exit 1
+    fi
+    if ! is_playlist "${playlist}"; then
+        print_err "Unknown playlist '${playlist}'."
+        exit 1
+    fi
+    shift
+    local add=("${@}")
+    local path=
 
-    input=("$@")
-    first=1
-    last=$[ ${n} - 1 ]
+    print_info "Music will be added to playlist '${playlist}'."
+    for a in "${add[@]}"; do
+        if [ ! -f "${a}" ]; then
+            continue
+        fi
+        path=$(readlink -f "${a}")
+        print_info "Adding '$(basename "${a}")'."
+        ln -s "${path}" "${PLAYLISTDIR}/${playlist}/"
+    done
+}
 
-    for song in "${input[@]:${first}:${last}}"; do
-        song_path="$(pwd)/${song}"
-        if [ -f "${song}" ]; then
-            if [ -f "${song_path}" ]; then
-                loc="${song_path}"
-            else
-                loc="${song}"
-            fi
+##
+# Remove songs from the specified playlist
+#
+delete_music_from_playlist()
+{
+    local playlist="${1}"
+    if [ -z "${playlist}" ]; then
+        print_err "Must specify a playlist with '--playlist'."
+        exit 1
+    fi
+    if ! is_playlist "${playlist}"; then
+        print_err "Unknown playlist '${playlist}'."
+        exit 1
+    fi
+    shift
+    local remove=("${@}")
+    local path=
 
-            ln -v -s "${loc}" "${PLAYLIST_PATH}/$(basename ${song})"
+    print_info "Music will be removed from playlist '${playlist}'."
+    for r in "${remove[@]}"; do
+        path="${PLAYLISTDIR}/${playlist}/${r}"
+        if [ -f "${r}" ]; then
+            print_info "Removing '$(basename "${r}")'."
+            rm -f "${r}"
+        elif [ -f "${path}" ]; then
+            print_info "Removing '$(basename "${path}")'."
+            rm -f "${path}"
         else
-            search_library_for_song "${song}"
-            if [ $? -eq 0 ]; then
-                ln -v -s "${SEARCH_SONG}" "${PLAYLIST_PATH}/$(basename ${SEARCH_SONG})"
-            fi
+            :
         fi
     done
-}
-
-## Remove songs from the specified playlist
-music_player_playlist_remove_music() {
-    n=$[ $# - 1 ]
-    get_playlist_info "${ARGV[${n}]}"
-
-    input=("$@")
-    first=1
-    last=$[ ${n} - 1 ]
-    for song in "${ARGV[@]:1:${n}}"; do
-        song_path="${PLAYLIST_PATH}/$(basename ${song})"
-        if [ -f "${song_path}" ]; then
-            rm -i "${song_path}"
-        fi
-    done
-}
-
-## Start the music player (why would I do this first option if I just want the player started?)
-music_player_start() {
-    if [ "$(is_music_player_running)" == true ]; then
-        ${MUSIC_PLAYER} -c
-    else
-        ${MUSIC_PLAYER} -S 1>/dev/null
-        ${MUSIC_PLAYER} -c
-        ${MUSIC_PLAYER} -t shuffle 
-    fi 
 }
 
 ##
@@ -760,7 +778,7 @@ is_music_player_running()
 is_playlist()
 {
     local playlist="${1}"
-    if [ -d "${PLAYLISTDIR}/${playlist}" ]; then
+    if [ -n "${playlist}" -a -d "${PLAYLISTDIR}/${playlist}" ]; then
         return 0
     else
         return 1
