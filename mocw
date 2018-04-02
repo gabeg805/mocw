@@ -319,7 +319,6 @@ install()
 
     print_info "Saving music playlist location."
     ln -sv "${playlist}" "${PLAYLISTDIR}"
-    # echo "${playlist}" > "${PLAYLISTFILE}"
 
     # Save library file
     echo "Where is your music library located?"
@@ -332,7 +331,6 @@ install()
 
     print_info "Saving music library location."
     ln -sv "${library}" "${LIBRARYDIR}"
-    # echo "${library}" > "${LIBRARYFILE}"
 }
 
 ##
