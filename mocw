@@ -48,7 +48,7 @@ main()
         exit 0
     fi
 
-    short="hvsxpNPq:il:s:c:a:d:"
+    short="hvsxpNPq:il:S:c:a:d:"
     long="help,verbose,install,uninstall,start,stop,play,pause,next,previous,queue:,playlist:,info,list:,search:,create:,add:,delete:"
     args=$(getopt -o "${short}" --long "${long}" --name "${PROG}" -- "${@}")
 
